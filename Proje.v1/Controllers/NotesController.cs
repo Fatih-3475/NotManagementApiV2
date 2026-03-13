@@ -1,83 +1,81 @@
-﻿
-using Microsoft.AspNetCore.Mvc;
-using Proje.v1.Data;
-using Proje.v1.Models;
+﻿using Microsoft.AspNetCore.Mvc;
+using Proje.v1.Dtos;
+using Proje.v1.Services;
 
 namespace Proje.v1.Controllers
 {
-        [ApiController]
-        [Route("api/notes")]
-        public class NotesController:ControllerBase
+    [ApiController]
+    [Route("api/notes")]
+    public class NotesController : ControllerBase
+    {
+        private readonly INoteService _noteService;
+
+        public NotesController(INoteService noteService)
         {
-            [HttpGet]
-            public IActionResult GetNotes()
-            {
-                var result = NoteStore.Notes
-                    .Where(x => !x.IsArchived)
-                    .OrderByDescending(x => x.CreatedDate)
-                    .ToList();
+            _noteService = noteService;
+        }
+        [HttpGet]
+        public ActionResult GetNotes([FromQuery] int page = 1, [FromQuery] int pageSize = 5,[FromQuery] string? search = null)
+        {
+            if (page < 1) return BadRequest("Page değeri 1 veya daha büyük olmalıdır.");
+            if (pageSize < 1 || pageSize > 50) return BadRequest("PageSize değeri 1 ile 50 arasında olmalıdır.");
+            var value = _noteService.GetNotes(page, pageSize,search);
+            return Ok(value);
+        } 
 
-                return Ok(result);
-            }
+        [HttpPost]
+        public IActionResult CreateNote(CreateNoteDto dto)
+        {
+            var newNote = _noteService.CreateNote(dto);
 
-           [HttpPost]
-           public IActionResult CreateNote(CreateNoteDto dto)
-            {
-                if (string.IsNullOrWhiteSpace(dto.Title))
-                    return BadRequest("Title boş olamaz");
+            return CreatedAtAction(
+                nameof(GetNoteById),
+                new { id = newNote.Id },
+                newNote
+            );
+        }
 
-                if (string.IsNullOrWhiteSpace(dto.Content) || dto.Content.Length < 5)
-                    return BadRequest("Content en az 5 karakter olmalı");
+        [HttpGet("{id}")]
+        public IActionResult GetNoteById(int id)
+        {
+            var note = _noteService.GetNoteById(id);
 
-                var newNote = new Note
-                {
-                    Id = NoteStore.Notes.Count == 0 ? 1: NoteStore.Notes.Max(x => x.Id) + 1,
-                    Title = dto.Title,
-                    Content = dto.Content,
-                    IsArchived = false,
-                    CreatedDate = DateTime.Now
-                };
+            if (note == null)
+                return NotFound();
 
-                NoteStore.Notes.Add(newNote);
+            return Ok(note);
+        }
 
-                return CreatedAtAction(
-                    nameof(GetNotes),
-                    new { id = newNote.Id },
-                    newNote
-                );
-            }
-            [HttpGet("{id}")]
-             public IActionResult GetNoteById(int id)
-             {
-              var note = NoteStore.Notes.FirstOrDefault(x => x.Id == id && !x.IsArchived);
-                if (note == null)
-                    return NotFound();
-                return Ok(note);
-                }
+        [HttpDelete("{id}")]
+        public IActionResult DeleteNote(int id)
+        {
+            var result = _noteService.DeleteNote(id);
 
-            [HttpDelete("{id}")]
-            public IActionResult DeleteNote(int id)
-            { 
-            var note = NoteStore.Notes.FirstOrDefault(x => x.Id == id);
-                if (note == null) 
-                
-                 return NotFound();
+            if (!result)
+                return NotFound();
 
-                note.IsArchived = true;
-                return NoContent();
-            }
+            return NoContent();
+        }
 
-            [HttpGet("search")]
-            public IActionResult SearchNotes([FromQuery] string? search)
-            {
-                if (string.IsNullOrWhiteSpace(search))
-                    return BadRequest("Search boş olamaz!!");
-                var result = NoteStore.Notes
-                    .Where(x => !x.IsArchived  && x.Title != null && x.Title.Contains(search) )
-                    .OrderByDescending(x => x.CreatedDate)
-                    .ToList();
+        [HttpPut("{id}")]
+        public IActionResult UpdateNotes(int id, UpdateNoteDto dto)
+        {
+            var result = _noteService.UpdateNote(id, dto);
 
-                return Ok(result);
-            }
+            if (!result)
+                return NotFound("Not bulunamadı!");
+
+            return Ok("Not güncellendi");
+        }
+
+        [HttpGet("search")]
+        public IActionResult SearchNotes([FromQuery] string? search)
+        {
+            if (string.IsNullOrWhiteSpace(search))
+                return BadRequest("Search boş olamaz!!!");
+
+            var result = _noteService.SearchNotes(search);
+            return Ok(result);
         }
     }
+}
